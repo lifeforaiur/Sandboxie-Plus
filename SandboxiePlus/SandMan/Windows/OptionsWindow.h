@@ -33,6 +33,9 @@ public:
 		eParent
 	};
 
+	void LoadCompletionConsent();
+	void SaveCompletionConsent();
+
 signals:
 	//void OptionsChanged();
 	void Closed();
@@ -155,6 +158,9 @@ private slots:
 
 	void OnBlockDns();
 	void OnBlockSamba();
+
+	void OnNetworkChanged() { m_NetworkChanged = true; OnOptChanged(); }
+	void OnAdapterChanged();
 	//
 	
 	// access
@@ -261,9 +267,13 @@ private slots:
 	void OnOpenCOM();
 	void OnIsolationChanged();
 	void OnDebugChanged();
+	void OnDumpConfig();
 
 	void SetIniEdit(bool bEnable);
 	void OnEditIni();
+	void OnIniValidationToggled(int state);
+	void OnTooltipToggled(int state);
+	void OnAutoCompletionToggled(int state);
 	void OnSaveIni();
 	void OnIniChanged();
 	void OnCancelEdit();
@@ -456,10 +466,14 @@ protected:
 	void LoadINetAccess();
 	void SaveINetAccess();
 
+	void LoadNetwork();
+	void SaveNetwork();
+
 	void ParseAndAddFwRule(const QString& Value, bool disabled = false, const QString& Template = QString());
 	void CloseNetFwEdit(bool bSave = true);
 	void CloseNetFwEdit(QTreeWidgetItem* pItem, bool bSave = true);
 	ENetWfProt GetFwRuleProt(const QString& Value);
+	QString GetFwRuleProtStr(ENetWfProt Prot);
 	ENetWfAction GetFwRuleAction(const QString& Value);
 	QString GetFwRuleActionStr(ENetWfAction Action);
 	void LoadNetFwRules();
@@ -552,6 +566,9 @@ protected:
 	void SaveIniSection();
 
 	void ApplyIniEditFont();
+	
+	// Autocompletion support
+	void UpdateAutoCompletion();
 
 	QString GetCategoryName(const QString& Category);
 
@@ -574,6 +591,7 @@ protected:
 	bool m_NetFwRulesChanged;
 	bool m_DnsFilterChanged;
 	bool m_NetProxyChanged;
+	bool m_NetworkChanged;
 	bool m_AccessChanged;
 	bool m_TemplatesChanged;
 	bool m_FoldersChanged;
@@ -589,7 +607,7 @@ protected:
 	QStringList m_BoxTemplates;
 	QStringList m_BoxFolders;
 
-	QList<QPair<QString, QString>> m_Settings;
+	QList<CSbieIni::SbieIniValue> m_Settings;
 
 	QSharedPointer<CSbieIni> m_pBox;
 
@@ -640,6 +658,10 @@ private:
 
 	void InitLangID();
 
-	class CCodeEdit* m_pCodeEdit;
+	class CCodeEdit* m_pCodeEdit = nullptr;
+	class CIniHighlighter* m_pIniHighlighter = nullptr;
+
+	bool m_IniValidationEnabled = true;
+	bool m_AutoCompletionConsent;
 };
 

@@ -52,14 +52,18 @@ public:
 	static bool AddBrowserIcon();
 
 	static bool ApplyCertificate(const QByteArray &Certificate, QWidget* widget);
-
 	static void LoadCertificate(QString CertPath = QString());
+	static bool	TryRefreshCert(QWidget* parent, QObject* receiver, const char* member);
+	static bool	CertRefreshRequired();
 
 	static QString GetCertType();
 	static QColor GetCertColor();
 	static QString GetCertLevel();
 
 	static void StartEval(QWidget* parent, QObject* receiver, const char* member);
+
+	void LoadCompletionConsent();
+	void SaveCompletionConsent();
 
 signals:
 	void OptionsChanged(bool bRebuildUI = false);
@@ -69,7 +73,7 @@ public slots:
 	void ok();
 	void apply();
 
-	void showTab(const QString& Name, bool bExclusive = false);
+	void showTab(const QString& Name, bool bExclusive = false, bool bExec = false);
 
 private slots:
 	void OnTab();
@@ -104,6 +108,13 @@ private slots:
 
 	void OnRamDiskChange();
 
+	void OnImportBox();
+	void OnMakeBox();
+	void OnAddRoot();
+	void OnRemoveBox();
+
+	void OnImportChanged() { m_ImportChanged = true; OnOptChanged(); }
+
 	void OnProtectionChange();
 	void OnSetPassword();
 
@@ -112,6 +123,7 @@ private slots:
 	void OnAddWarnFolder();
 	void OnDelWarnProg();
 
+	void OnMoTWChange();
 	void OnVolumeChanged();
 	void UpdateDrives();
 
@@ -129,6 +141,9 @@ private slots:
 
 	void SetIniEdit(bool bEnable);
 	void OnEditIni();
+	void OnIniValidationToggled(int state);
+	void OnTooltipToggled(int state);
+	void OnAutoCompletionToggled(int state);
 	void OnSaveIni();
 	void OnIniChanged();
 	void OnCancelEdit();
@@ -152,6 +167,9 @@ private slots:
 	void OnSelectIniEditFont();
 	void OnResetIniEditFont();
 
+	void OnSelectUiFont();
+	void OnResetUiFont();
+
 protected:
 	void closeEvent(QCloseEvent *e);
 
@@ -172,6 +190,11 @@ protected:
 	void	SaveIniSection();
 	void    ApplyIniEditFont();
 
+	// Autocompletion support
+	void UpdateAutoCompletion();
+
+	void	InitSupport();
+
 	bool	m_bRebuildUI;
 	bool	m_HoldChange;
 	int 	m_CompatLoaded;
@@ -182,6 +205,7 @@ protected:
 	bool	m_CompatChanged;
 	bool	m_RunChanged;
 	bool	m_SkipUACChanged;
+	bool	m_ImportChanged;
 	bool	m_ProtectionChanged;
 	bool	m_GeneralChanged;
 	bool	m_FeaturesChanged;
@@ -196,7 +220,11 @@ private:
 
 	Ui::SettingsWindow ui;
 
-	class CCodeEdit* m_pCodeEdit;
+	class CCodeEdit* m_pCodeEdit = nullptr;
+	class CIniHighlighter* m_pIniHighlighter = nullptr;
+
+	bool m_IniValidationEnabled = true;
+	bool m_AutoCompletionConsent;
 };
 
 QVariantMap GetRunEntry(const QString& sEntry);

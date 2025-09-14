@@ -51,10 +51,6 @@ struct _PROCESS {
     // changes to the linked list of PROCESS blocks are synchronized by
     // an exclusive lock on Process_ListLock
 
-#ifndef USE_PROCESS_MAP
-    LIST_ELEM list_elem;
-#endif
-
     // process id
 
     HANDLE pid;
@@ -100,11 +96,7 @@ struct _PROCESS {
 
     PERESOURCE threads_lock;
 
-#ifdef USE_PROCESS_MAP
     HASH_MAP thread_map;
-#else
-    LIST threads;
-#endif
 
     // flags
 
@@ -142,6 +134,7 @@ struct _PROCESS {
     BOOLEAN protect_host_images;
     BOOLEAN use_security_mode;
     BOOLEAN is_locked_down;
+    BOOLEAN open_all_nt;
 #ifdef USE_MATCH_PATH_EX
     BOOLEAN restrict_devices;
     BOOLEAN use_rule_specificity;
@@ -538,15 +531,9 @@ NTSTATUS Process_Api_Kill(PROCESS *proc, ULONG64 *parms);
 //---------------------------------------------------------------------------
 
 
-#ifdef USE_PROCESS_MAP
 extern HASH_MAP Process_Map;
 extern HASH_MAP Process_MapDfp;
 extern HASH_MAP Process_MapFcp;
-#else
-extern LIST Process_List;
-extern LIST Process_ListDfp;
-extern LIST Process_ListFcp;
-#endif
 extern PERESOURCE Process_ListLock;
 
 extern volatile BOOLEAN Process_ReadyToSandbox;

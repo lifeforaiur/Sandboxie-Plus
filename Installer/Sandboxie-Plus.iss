@@ -8,6 +8,7 @@
 ;#define MyDrvVersion "5.49.8"
 ;#define MyAppArch "x64"
 ;#define MyAppSrc "SbiePlus64"
+#define CurrentYear GetDateTimeString('yyyy', '', '')
 
 
 [Setup]
@@ -30,10 +31,12 @@ AllowNoIcons=yes
 AlwaysRestart=no
 LicenseFile=license.txt
 UsedUserAreasWarning=no
-VersionInfoCopyright=Copyright (C) 2020-2024 by David Xanatos (xanasoft.com)
+VersionInfoCopyright=Copyright (C) 2020-{#CurrentYear} by David Xanatos (xanasoft.com)
 VersionInfoVersion={#MyAppVersion}
 SetupIconFile=SandManInstall.ico
 SignTool=sha256
+; Require windows 10 or later
+;MinVersion=10.0
 
 ; Handled in code section as always want DirPage for portable mode.
 DisableDirPage=no
@@ -48,6 +51,10 @@ Name: "DesktopIcon"; Description: "{cm:CreateDesktopIcon}"; MinVersion: 0.0,5.0;
 ;Name: "AutoStartEntry"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; MinVersion: 0.0,5.0; Check: not IsPortable
 ;Name: "AddRunSandboxed"; Description: "{cm:AddSandboxedMenu}"; MinVersion: 0.0,5.0; Check: not IsPortable
 Name: "RefreshBuild"; Description: "{cm:RefreshBuild}"; MinVersion: 0.0,5.0; Check: not IsPortable
+; todo make ARM64 ImDisk Package
+#if MyAppArch == "x64"
+Name: "InstallImDisk"; Description: "{cm:InstallImDisk}"; MinVersion: 0.0,5.0; Flags: unchecked; Check: IsWin64
+#endif
 
 
 [Files]
@@ -75,6 +82,11 @@ Source: ".\Release\{#MyAppSrc}\64\SbieDll.pdb"; DestDir: "{app}\64\"; MinVersion
 Source: ".\Sandboxie.ini"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: IsPortable
 Source: ".\Sandboxie-Plus.ini"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: IsPortable
 
+; ImDiskTK
+#if MyAppArch == "x64"
+Source: ".\imdisk_files.cab"; DestDir: "{app}"; Flags: ignoreversion
+Source: ".\imdisk_install.bat"; DestDir: "{app}"; Flags: ignoreversion
+#endif
 
 [Icons]
 Name: "{group}\Sandboxie-Plus"; Filename: "{app}\SandMan.exe"; MinVersion: 0.0,5.0
@@ -105,6 +117,14 @@ Type: files; Name: "{app}\libssl-1_1-x64.dll"
 Type: dirifempty; Name: "{localappdata}\{#MyAppName}"
 ; Delete existing .pdb files before installing new ones.
 Type: files; Name: "{app}\*.pdb"
+; No longer used since 1.16.1
+Type: files; Name: "{app}\styles\qwindowsvistastyle.dll"
+Type: files; Name: "{app}\Qt5Core.dll"
+Type: files; Name: "{app}\Qt5Gui.dll"
+Type: files; Name: "{app}\Qt5Network.dll"
+Type: files; Name: "{app}\Qt5Qml.dll"
+Type: files; Name: "{app}\Qt5Widgets.dll"
+Type: files; Name: "{app}\Qt5WinExtras.dll"
 
 
 [Registry]
@@ -142,6 +162,11 @@ Filename: "{app}\KmdUtil.exe"; Parameters: "install SbieSvc ""{app}\SbieSvc.exe"
 
 ; Update metadata (templates and translations)
 Filename: "{app}\UpdUtil.exe"; Parameters: {code:GetParams}; StatusMsg: "UpdUtill checking for updates..."; Check: IsRefresh
+
+; Install ImDisk 3.0 driver
+#if MyAppArch == "x64"
+Filename: "{app}\imdisk_install.bat"; StatusMsg: "Installing ImDisk 3.0 Driver..."; Check: IsInstallImDisk
+#endif
 
 ; Start the Sbie service.
 Filename: "{app}\KmdUtil.exe"; Parameters: "start SbieSvc"; StatusMsg: "KmdUtil start SbieSvc"; Check: not IsPortable
@@ -489,7 +514,7 @@ begin
 
         if ExecRet = IDYES then
         begin
-          Exec('cmd.exe', '/c ' + UninstallString, '', SW_HIDE, ewWaitUntilTerminated, ExecRet);
+          Exec(ExpandConstant('{sys}\cmd.exe'), '/c ' + UninstallString, '', SW_HIDE, ewWaitUntilTerminated, ExecRet);
           ExecRet := IDYES;
         end;
 
@@ -554,6 +579,14 @@ function IsRefresh(): Boolean;
 begin
 
   if WizardIsTaskSelected('RefreshBuild') then begin
+    Result := True;
+  end;
+end;
+
+function IsInstallImDisk(): Boolean;
+begin
+
+  if WizardIsTaskSelected('InstallImDisk') and (not WizardSilent) then begin
     Result := True;
   end;
 end;

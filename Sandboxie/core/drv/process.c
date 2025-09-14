@@ -98,15 +98,9 @@ static NTSTATUS Process_CreateUserProcess(
 //---------------------------------------------------------------------------
 
 
-#ifdef USE_PROCESS_MAP
 HASH_MAP Process_Map;
 HASH_MAP Process_MapDfp;
 HASH_MAP Process_MapFcp;
-#else
-LIST Process_List;
-LIST Process_ListDfp;
-LIST Process_ListFcp;
-#endif
 PERESOURCE Process_ListLock = NULL;
 
 static BOOLEAN Process_NotifyImageInstalled = FALSE;
@@ -132,7 +126,6 @@ _FX BOOLEAN Process_Init(void)
 {
     NTSTATUS status = STATUS_UNSUCCESSFUL;
 
-#ifdef USE_PROCESS_MAP
     map_init(&Process_Map, Driver_Pool);
 	map_resize(&Process_Map, 128); // prepare some buckets for better performance
 
@@ -141,11 +134,6 @@ _FX BOOLEAN Process_Init(void)
 
     map_init(&Process_MapFcp, Driver_Pool);
 	map_resize(&Process_MapFcp, 128); // prepare some buckets for better performance
-#else
-    List_Init(&Process_List);
-    List_Init(&Process_ListDfp);
-    List_Init(&Process_ListFcp);
-#endif
 
     if (! Mem_GetLockResource(&Process_ListLock, TRUE))
         return FALSE;
@@ -485,41 +473,28 @@ _FX PROCESS *Process_Find(HANDLE ProcessId, KIRQL *out_irql)
     KeRaiseIrql(APC_LEVEL, &irql);
     ExAcquireResourceSharedLite(Process_ListLock, TRUE);
 
-#ifdef USE_PROCESS_MAP
     proc = map_get(&Process_Map, ProcessId);
     if (proc) {
-#else
-    proc = List_Head(&Process_List);
-    while (proc) {
-        if (proc->pid == ProcessId) {
-#endif
 
-            if (check_terminated && proc->terminated) {
-                //
-                // ntdll is going to call NtRaiseHardError before
-                // aborting, so disable hard errors to avoid the
-                // pop up box from csrss
-                //
+        if (check_terminated && proc->terminated) {
+            //
+            // ntdll is going to call NtRaiseHardError before
+            // aborting, so disable hard errors to avoid the
+            // pop up box from csrss
+            //
 
-                if (proc->terminated != 9) {
-                    proc->terminated = 9;
-                    PsSetThreadHardErrorsAreDisabled(
-                        (PETHREAD)KeGetCurrentThread(), TRUE);
-                }
-                //
-                // signal that the caller should return status
-                //     STATUS_PROCESS_IS_TERMINATING
-                // (see Api_FastIo_DEVICE_CONTROL for example)
-                //
-                proc = PROCESS_TERMINATED;
+            if (proc->terminated != 9) {
+                proc->terminated = 9;
+                PsSetThreadHardErrorsAreDisabled(
+                    (PETHREAD)KeGetCurrentThread(), TRUE);
             }
-
-#ifndef USE_PROCESS_MAP
-            break;
+            //
+            // signal that the caller should return status
+            //     STATUS_PROCESS_IS_TERMINATING
+            // (see Api_FastIo_DEVICE_CONTROL for example)
+            //
+            proc = PROCESS_TERMINATED;
         }
-
-        proc = List_Next(proc);
-#endif
     }
 
     if (out_irql) {
@@ -615,11 +590,7 @@ _FX void Process_CreateTerminated(HANDLE ProcessId, ULONG SessionId)
         KeRaiseIrql(APC_LEVEL, &irql);
         ExAcquireResourceExclusiveLite(Process_ListLock, TRUE);
 
-#ifdef USE_PROCESS_MAP
         map_insert(&Process_Map, ProcessId, proc, 0);
-#else
-        List_Insert_After(&Process_List, NULL, proc);
-#endif
 
         ExReleaseResourceLite(Process_ListLock);
         KeLowerIrql(irql);
@@ -777,6 +748,7 @@ _FX PROCESS *Process_Create(
 
     proc->use_security_mode = Conf_Get_Boolean(proc->box->name, L"UseSecurityMode", 0, FALSE);
     proc->is_locked_down = proc->use_security_mode || Conf_Get_Boolean(proc->box->name, L"SysCallLockDown", 0, FALSE);
+    proc->open_all_nt = Conf_Get_Boolean(proc->box->name, L"OpenAllSysCalls", 0, FALSE);
 #ifdef USE_MATCH_PATH_EX
     proc->restrict_devices = proc->use_security_mode || Conf_Get_Boolean(proc->box->name, L"RestrictDevices", 0, FALSE);
 
@@ -789,7 +761,7 @@ _FX PROCESS *Process_Create(
     // check certificate
     //
 
-    if (!Verify_CertInfo.opt_sec && !proc->image_sbie) {
+    if (!(Verify_CertInfo.active && Verify_CertInfo.opt_sec) && !proc->image_sbie) {
 
         const WCHAR* exclusive_setting = NULL;
         if (proc->use_security_mode)
@@ -820,7 +792,7 @@ _FX PROCESS *Process_Create(
         }
     }
 
-    if (!Verify_CertInfo.opt_enc && !proc->image_sbie) {
+    if (!(Verify_CertInfo.active && Verify_CertInfo.opt_enc) && !proc->image_sbie) {
         
         const WCHAR* exclusive_setting = NULL;
         if (proc->confidential_box)
@@ -920,11 +892,7 @@ _FX PROCESS *Process_Create(
     KeRaiseIrql(APC_LEVEL, &irql);
     ExAcquireResourceExclusiveLite(Process_ListLock, TRUE);
 
-#ifdef USE_PROCESS_MAP
     map_insert(&Process_Map, ProcessId, proc, 0);
-#else
-    List_Insert_After(&Process_List, NULL, proc);
-#endif
 
     *out_irql = irql;
 
@@ -1552,18 +1520,7 @@ _FX void Process_Delete(HANDLE ProcessId)
     KeRaiseIrql(APC_LEVEL, &irql);
     ExAcquireResourceExclusiveLite(Process_ListLock, TRUE);
 
-#ifdef USE_PROCESS_MAP
     map_take(&Process_Map, ProcessId, &proc, 0);
-#else
-    proc = List_Head(&Process_List);
-    while (proc) {
-        if (proc->pid == ProcessId) {
-            List_Remove(&Process_List, proc);
-            break;
-        }
-        proc = (PROCESS *)List_Next(proc);
-    }
-#endif
 
     Process_DfpDelete(ProcessId);
 
