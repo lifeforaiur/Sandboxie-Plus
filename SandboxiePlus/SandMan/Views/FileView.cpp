@@ -7,6 +7,194 @@
 #include "../MiscHelpers/Common/OtherFunctions.h"
 #include "../QSbieAPI/SbieUtils.h"
 #include "../Windows/SettingsWindow.h"
+#include <QKeyEvent>
+#include <QDir>
+#include <QDirIterator>
+
+////////////////////////////////////////////////////////////////////////////////////////
+// CFileSearchThread
+
+CFileSearchThread::CFileSearchThread(const QString& rootPath, const QRegularExpression& pattern, QObject* parent)
+    : QThread(parent), m_RootPath(rootPath), m_SearchPattern(pattern)
+{
+}
+
+void CFileSearchThread::run()
+{
+    emit progressUpdate(0, 100);
+    searchDirectory(m_RootPath, 0.0, 100.0);
+    emit progressUpdate(100, 100);
+}
+
+void CFileSearchThread::searchDirectory(const QString& dirPath, double baseProgress, double availableProgress)
+{
+	if (m_bCancelled)
+		return;
+
+	QDir dir(dirPath);
+	if (!dir.exists())
+		return;
+
+	QFileInfoList entries = dir.entryInfoList(QDir::NoDotAndDotDot | QDir::AllDirs | QDir::Files | QDir::Hidden | QDir::System);
+	int entryCount = entries.count();
+
+	double progressPerEntry = availableProgress / entryCount;
+
+	for (int i = 0; i < entryCount; i++)
+	{
+		if (m_bCancelled)
+			return;
+
+		const QFileInfo& entry = entries[i];
+
+		double currentProgress = baseProgress + (i * progressPerEntry);
+		//emit progressUpdate((int)currentProgress, 100);
+
+		QString fileName = entry.fileName();
+		QString fullPath = entry.absoluteFilePath();
+
+		if (m_SearchPattern.match(fileName).hasMatch())
+			emit pathFound(fullPath);
+
+		if (entry.isDir())
+			searchDirectory(fullPath, currentProgress, progressPerEntry);
+	}
+
+	emit progressUpdate((int)(baseProgress + availableProgress), 100);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
+// CFileFilterProxyModel
+
+CFileFilterProxyModel::CFileFilterProxyModel(QObject* parent)
+	: QSortFilterProxyModel(parent)
+{
+	m_bFilterActive = false;
+}
+
+void CFileFilterProxyModel::SetSearchPattern(const QRegularExpression& pattern)
+{
+    if (pattern == m_SearchPattern)
+        return;
+
+    beginFilterUpdate();
+
+    m_SearchPattern = pattern;
+    m_bFilterActive = pattern.isValid() && !pattern.pattern().isEmpty();
+    if (m_bFilterActive) {
+        // Mark search as in progress to prevent filtering until results arrive
+        m_bSearchInProgress = true;
+    }
+
+    endFilterUpdate();
+}
+
+void CFileFilterProxyModel::ClearFilter()
+{
+    beginFilterUpdate();
+    m_SearchPattern = QRegularExpression();
+    m_bFilterActive = false;
+    m_bSearchInProgress = false;
+    m_PathFilter.clear();
+    endFilterUpdate();
+}
+
+void CFileFilterProxyModel::RefreshFilter()
+{
+    // Refresh filter state using the version-aware helpers
+    beginFilterUpdate();
+    endFilterUpdate();
+}
+
+void CFileFilterProxyModel::beginFilterUpdate()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+}
+
+void CFileFilterProxyModel::endFilterUpdate()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange();
+#else
+    invalidateFilter();
+#endif
+}
+
+void CFileFilterProxyModel::SetRootPath(const QString& path)
+{
+	m_RootPath = QString(path).replace("\\", "/");
+}
+
+void CFileFilterProxyModel::setSourceModel(QAbstractItemModel* sourceModel)
+{
+	QSortFilterProxyModel::setSourceModel(sourceModel);
+}
+
+void CFileFilterProxyModel::AddPathFilter(const QString& path) 
+{ 
+    for (QString parentPath = path; !parentPath.isEmpty(); )
+    {
+        //QDir parentDir(parentPath);
+        //parentDir.cdUp();
+        //parentPath = parentDir.absolutePath();
+        parentPath = Split2(parentPath, "/", true).first;
+
+        QString parentLower = parentPath.toLower();
+        if(m_PathFilter.contains(parentLower))
+			break;
+        m_PathFilter.insert(parentLower);
+        if(m_RootPath.compare(parentPath, Qt::CaseInsensitive) == 0)
+            break;
+    }
+
+    if (!m_bUpdatePending)
+    {
+        m_bUpdatePending = true;
+        QTimer::singleShot(250, [this]() {
+            m_bUpdatePending = false;
+            // Don't invalidate yet - wait for search to complete
+            emit filterUpdated();
+		});
+    }
+}
+
+bool CFileFilterProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const
+{
+	if (!m_bFilterActive)
+		return true;
+
+	// While search is in progress, show everything - don't filter yet
+	if (m_bSearchInProgress)
+		return true;
+
+    // Nothing to filter against
+    if (m_PathFilter.isEmpty() && (!m_SearchPattern.isValid() || m_SearchPattern.pattern().isEmpty()))
+        return true;
+
+	QFileSystemModel* fileModel = qobject_cast<QFileSystemModel*>(sourceModel());
+	if (!fileModel)
+		return true;
+
+	QModelIndex index = fileModel->index(source_row, 0, source_parent);
+	if (!index.isValid())
+		return false;
+
+    QString filePath = fileModel->filePath(index);
+    QString loweredPath = filePath.toLower();
+    if (m_PathFilter.contains(loweredPath))
+        return true;
+
+	QString fileName = fileModel->fileName(index);
+	if (m_SearchPattern.match(fileName).hasMatch())
+		return true;
+
+	return false;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
+// CFileView
 
 CFileView::CFileView(QWidget *parent)
 	: QWidget(parent)
@@ -21,6 +209,8 @@ CFileView::CFileView(QWidget *parent)
     m_pMainLayout->addWidget(m_pTreeView, 0, 0);
 
     m_pFileModel = NULL;
+	m_pProxyModel = NULL;
+	m_pFinder = NULL;
 
     m_pTreeView->setSortingEnabled(true);
     m_pTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -34,11 +224,24 @@ CFileView::CFileView(QWidget *parent)
 	m_pTreeView->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(m_pTreeView, SIGNAL(customContextMenuRequested( const QPoint& )), this, SLOT(OnFileMenu(const QPoint &)));
 	connect(m_pTreeView, SIGNAL(doubleClicked(const QModelIndex &)), this, SLOT(OnFileDblClick(const QModelIndex &)));
+	
+	m_pFinder = new CFinder(this, this, 0);
+	m_pFinder->SetTree(m_pTreeView);
+	connect(this, SIGNAL(destroyed()), m_pFinder, SLOT(deleteLater()));
+	connect(m_pFinder, SIGNAL(SetFilter(const QRegularExpression&, int, int)),
+		this, SLOT(OnSetFilter(const QRegularExpression&, int, int)));
+
+	m_pMainLayout->addWidget(m_pFinder, 1, 0);
 }
 
 CFileView::~CFileView()
 {
     SaveState();
+
+    if (m_pSearchThread) {
+        m_pSearchThread->cancel();
+        m_pSearchThread->wait();
+    }
 }
 
 void CFileView::SaveState()
@@ -50,6 +253,13 @@ void CFileView::SaveState()
 void CFileView::SetBox(const CSandBoxPtr& pBox)
 {
     if (!m_pBox.isNull()) disconnect(m_pBox.data(), SIGNAL(AboutToBeModified()), this, SLOT(OnAboutToBeModified()));
+
+    m_pFinder->Close();
+
+	if (m_pSearchThread) {
+		m_pSearchThread->cancel();
+		m_pSearchThread->wait();
+	}
 
 	m_pBox = pBox;
 
@@ -71,32 +281,160 @@ void CFileView::SetBox(const CSandBoxPtr& pBox)
         delete m_pFileModel;
         m_pFileModel = NULL;
     }
+	if (m_pProxyModel) {
+		delete m_pProxyModel;
+		m_pProxyModel = NULL;
+	}
     if (!Root.isEmpty()) {
         m_pFileModel = new QFileSystemModel(this);
         m_pFileModel->setFilter(QDir::NoDotAndDotDot | QDir::AllDirs | QDir::Files | QDir::Hidden | QDir::System);
+
+		m_pProxyModel = new CFileFilterProxyModel(this);
+		m_pProxyModel->setSourceModel(m_pFileModel);
+        m_pProxyModel->setRecursiveFilteringEnabled(true); // make sure parents stay visible when children match
+
+        // Connect to filterUpdated to restore root index after filter changes
+        connect(m_pProxyModel, &CFileFilterProxyModel::filterUpdated, this, [this]() {
+            if (!m_RootPath.isEmpty() && m_pFileModel) {
+                QModelIndex sourceRoot = m_pFileModel->index(m_RootPath);
+                if (sourceRoot.isValid()) {
+                    QModelIndex proxyRoot = m_pProxyModel->mapFromSource(sourceRoot);
+                    if (proxyRoot.isValid())
+                        m_pTreeView->setRootIndex(proxyRoot);
+                }
+            }
+        }, Qt::QueuedConnection);
 
         QByteArray Columns = theConf->GetBlob("MainWindow/FileTree_Columns");
 	    if (!Columns.isEmpty())
 		    m_pTreeView->header()->restoreState(Columns);
     }
-    m_pTreeView->setModel(m_pFileModel);
+    m_pTreeView->setModel(m_pProxyModel);
 
-    if (!Root.isEmpty()) 
+    if (!Root.isEmpty())
     {
-        m_pTreeView->setRootIndex(m_pFileModel->setRootPath(Root));
+		m_RootPath = Root;
+		m_pProxyModel->SetRootPath(Root);
+		QModelIndex rootIndex = m_pFileModel->setRootPath(Root);
+        m_pTreeView->setRootIndex(m_pProxyModel->mapFromSource(rootIndex));
 
-        m_pTreeView->expand(m_pFileModel->index(Root + "/drive"));
-        m_pTreeView->expand(m_pFileModel->index(Root + "/share"));
-        m_pTreeView->expand(m_pFileModel->index(Root + "/user"));
-        //m_pTreeView->expand(m_pFileModel->index(Root + "/user/all"));
-        //m_pTreeView->expand(m_pFileModel->index(Root + "/user/current"));
+        m_pTreeView->expand(m_pProxyModel->mapFromSource(m_pFileModel->index(Root + "/drive")));
+        m_pTreeView->expand(m_pProxyModel->mapFromSource(m_pFileModel->index(Root + "/share")));
+        m_pTreeView->expand(m_pProxyModel->mapFromSource(m_pFileModel->index(Root + "/user")));
+        //m_pTreeView->expand(m_pProxyModel->mapFromSource(m_pFileModel->index(Root + "/user/all")));
+        //m_pTreeView->expand(m_pProxyModel->mapFromSource(m_pFileModel->index(Root + "/user/current")));
     }
+	else
+	{
+		m_RootPath.clear();
+		if (m_pProxyModel)
+			m_pProxyModel->SetRootPath(QString());
+	}
 }
 
 void CFileView::OnAboutToBeModified()
 {
     if (sender() == m_pBox.data())
         SetBox(CSandBoxPtr());
+}
+
+void CFileView::OnSetFilter(const QRegularExpression& Exp, int iOptions, int Column)
+{
+	if (!m_pProxyModel || !m_pFileModel)
+		return;
+
+	QString pattern = Exp.pattern();
+
+	if (pattern.isEmpty())
+	{
+		m_pProxyModel->ClearFilter();
+
+		if (!m_RootPath.isEmpty() && m_pFileModel)
+		{
+			QModelIndex sourceRoot = m_pFileModel->index(m_RootPath);
+			if (sourceRoot.isValid())
+			{
+				QModelIndex proxyRoot = m_pProxyModel->mapFromSource(sourceRoot);
+				m_pTreeView->setRootIndex(proxyRoot);
+			}
+		}
+		return;
+	}
+
+	QRegularExpression::PatternOptions options = QRegularExpression::NoPatternOption;
+	if ((iOptions & CFinder::eCaseSens) == 0)
+		options |= QRegularExpression::CaseInsensitiveOption;
+
+	QRegularExpression searchPattern(pattern, options);
+
+	if (!searchPattern.isValid()) {
+		m_pProxyModel->ClearFilter();
+		return;
+	}
+
+	m_pProxyModel->SetSearchPattern(searchPattern);
+
+	// Don't call setRootIndex here - it can trigger premature filtering
+	// The search completion will handle the view update
+
+    if (!m_bSearchPending) {
+        m_bSearchPending = true;
+
+        QTimer::singleShot(250, this, SLOT(DoSearch()));
+    }
+}
+
+void CFileView::DoSearch()
+{
+    m_bSearchPending = false;
+
+    if (!m_pProxyModel || !m_pFileModel)
+		return;
+
+	if (m_pSearchThread) {
+		m_pSearchThread->cancel();
+		m_pSearchThread->wait();
+	}
+
+	m_pProxyModel->ClearPathFilter();
+
+	QRegularExpression searchPattern = m_pProxyModel->GetSearchPattern();
+
+	if (!searchPattern.isValid() || searchPattern.pattern().isEmpty())
+		return;
+
+    // mark search active so filterAcceptsRow keeps everything visible
+    m_pProxyModel->SetSearchInProgress(true);
+
+	m_pSearchThread = new CFileSearchThread(m_RootPath, searchPattern, this);
+
+	connect(m_pSearchThread, &CFileSearchThread::pathFound, m_pProxyModel, &CFileFilterProxyModel::AddPathFilter, Qt::QueuedConnection);
+
+	connect(m_pSearchThread, &CFileSearchThread::progressUpdate, m_pFinder, &CFinder::SetProgress, Qt::QueuedConnection);
+
+	connect(m_pSearchThread, &QThread::finished, this, [this]() {
+        // Search completed - now activate filtering to show only results
+        m_pProxyModel->SetSearchInProgress(false);
+        m_pProxyModel->RefreshFilter();
+
+        // restore root after filtering so the tree shows results
+        if (!m_RootPath.isEmpty() && m_pFileModel) {
+            QModelIndex sourceRoot = m_pFileModel->index(m_RootPath);
+            if (sourceRoot.isValid()) {
+                QModelIndex proxyRoot = m_pProxyModel->mapFromSource(sourceRoot);
+                if (proxyRoot.isValid())
+                    m_pTreeView->setRootIndex(proxyRoot);
+            }
+        }
+        
+        m_pFinder->HideProgress();
+        m_pSearchThread->deleteLater();
+        m_pSearchThread = nullptr;
+        m_pTreeView->expandAll();
+    }, Qt::QueuedConnection);
+
+    m_pFinder->ShowProgress();
+	m_pSearchThread->start();
 }
 
 #include <windows.h>
@@ -328,8 +666,9 @@ void CFileView::OnFileMenu(const QPoint&)
 
     QStringList Files;
     foreach(const QModelIndex & Index, m_pTreeView->selectionModel()->selectedIndexes()) {
-        QString BoxedPath = m_pFileModel->fileInfo(Index).absoluteFilePath().replace("/", "\\");
-        if (m_pFileModel->fileInfo(Index).isDir())
+		QModelIndex sourceIndex = m_pProxyModel ? m_pProxyModel->mapToSource(Index) : Index;
+        QString BoxedPath = m_pFileModel->fileInfo(sourceIndex).absoluteFilePath().replace("/", "\\");
+        if (m_pFileModel->fileInfo(sourceIndex).isDir())
             BoxedPath += "\\";
 
         bool bFound = false;
@@ -450,7 +789,8 @@ void CFileView::OnFileDblClick(const QModelIndex &)
 {
     if (!m_pFileModel) return;
 
-    QString BoxedPath = m_pFileModel->fileInfo(m_pTreeView->currentIndex()).absoluteFilePath();
+	QModelIndex sourceIndex = m_pProxyModel ? m_pProxyModel->mapToSource(m_pTreeView->currentIndex()) : m_pTreeView->currentIndex();
+    QString BoxedPath = m_pFileModel->fileInfo(sourceIndex).absoluteFilePath();
 
     ShellExecuteW(NULL, NULL, BoxedPath.toStdWString().c_str(), NULL, m_pBox->GetFileRoot().toStdWString().c_str(), SW_SHOWNORMAL);
 }

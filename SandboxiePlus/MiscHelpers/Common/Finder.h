@@ -55,12 +55,18 @@ public slots:
 	void				Close();
 	void				OnToggle(bool checked);
 
+	void				SetProgress(int value, int maximum);
+	void				ShowProgress();
+	void				HideProgress();
+
 private slots:
 	void				OnUpdate();
 	void				OnText();
 	void				OnReturn();
 
 	void				OnSelectNext();
+	void				OnExpandAll();
+	void				OnCollapseAll();
 
 protected:
 	bool				GetCaseSensitive() const	{ return m_pCaseSensitive ? m_pCaseSensitive->isChecked() : false; }
@@ -85,6 +91,9 @@ private:
 	QAbstractButton*	m_pRegExp;
 	QComboBox*			m_pColumn;
 	QAbstractButton*	m_pHighLight;
+	QAbstractButton*	m_pExpandAll;
+	QAbstractButton*	m_pCollapseAll;
+	QProgressBar*		m_pProgressBar;
 
 	QRegularExpression	m_RegExp;
 	bool				m_bAlwaysRaw;

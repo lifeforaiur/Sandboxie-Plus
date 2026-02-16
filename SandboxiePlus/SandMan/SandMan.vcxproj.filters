@@ -213,6 +213,9 @@
     <ClCompile Include="AddonManager.cpp">
       <Filter>SandMan</Filter>
     </ClCompile>
+    <ClCompile Include="BoxTransfer.cpp">
+      <Filter>SandMan</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\SandboxieTools\Common\verify.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -241,6 +244,15 @@
       <Filter>Helpers</Filter>
     </ClCompile>
     <ClCompile Include="Views\SbieView.cpp">
+      <Filter>Views</Filter>
+    </ClCompile>
+    <ClCompile Include="Windows\EditorSettingsWindow.cpp">
+      <Filter>Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="Models\NtObjectModel.cpp">
+      <Filter>Models</Filter>
+    </ClCompile>
+    <ClCompile Include="Views\NtObjectView.cpp">
       <Filter>Views</Filter>
     </ClCompile>
   </ItemGroup>
@@ -388,6 +400,9 @@
     <QtMoc Include="AddonManager.h">
       <Filter>SandMan</Filter>
     </QtMoc>
+    <QtMoc Include="BoxTransfer.h">
+      <Filter>SandMan</Filter>
+    </QtMoc>
     <QtMoc Include="Engine\ScriptManager.h">
       <Filter>Engine</Filter>
     </QtMoc>
@@ -402,6 +417,15 @@
     </QtMoc>
     <QtMoc Include="Helpers\IniHighlighter.h">
       <Filter>Helpers</Filter>
+    </QtMoc>
+    <QtMoc Include="Windows\EditorSettingsWindow.h">
+      <Filter>Windows</Filter>
+    </QtMoc>
+    <QtMoc Include="Models\NtObjectModel.h">
+      <Filter>Models</Filter>
+    </QtMoc>
+    <QtMoc Include="Views\NtObjectView.h">
+      <Filter>Views</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>
@@ -449,6 +473,9 @@
       <Filter>Form Files</Filter>
     </QtUic>
     <QtUic Include="Forms\ExtractDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="Forms\EditorSettingsWindow.ui">
       <Filter>Form Files</Filter>
     </QtUic>
   </ItemGroup>

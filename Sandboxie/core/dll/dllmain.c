@@ -55,6 +55,7 @@ SBIELOW_DATA* SbieApi_data = NULL;
 #ifdef _M_ARM64EC
 ULONG* SbieApi_SyscallPtr = NULL;
 #endif
+extern HANDLE SbieApi_DeviceHandle;
 
 HINSTANCE Dll_Instance = NULL;
 HMODULE Dll_Ntdll = NULL;
@@ -110,7 +111,7 @@ BOOLEAN Dll_AppContainerToken = FALSE;
 BOOLEAN Dll_ChromeSandbox = FALSE;
 BOOLEAN Dll_FirstProcessInBox = FALSE;
 BOOLEAN Dll_CompartmentMode = FALSE;
-//BOOLEAN Dll_AlernateIpcNaming = FALSE;
+BOOLEAN Dll_AlternateIpcNaming = FALSE;
 
 ULONG Dll_ImageType = DLL_IMAGE_UNSPECIFIED;
 
@@ -208,6 +209,8 @@ _FX BOOL WINAPI DllMain(
             Gui_ResetClipCursor();
         }
 
+        if(!SbieApi_data && SbieApi_DeviceHandle != INVALID_HANDLE_VALUE)
+            NtClose(SbieApi_DeviceHandle);
     }
 
     return TRUE;
@@ -327,7 +330,7 @@ _FX void Dll_InitInjected(void)
 
     Dll_ProcessFlags = SbieApi_QueryProcessInfo(0, 0);
 
-    Dll_CompartmentMode = (Dll_ProcessFlags & SBIE_FLAG_APP_COMPARTMENT) != 0;
+    Dll_CompartmentMode = SbieApi_QueryConfBool(NULL, L"SetCompartmentMode", (Dll_ProcessFlags & SBIE_FLAG_APP_COMPARTMENT) != 0);
 
     //
     // check for restricted token types
@@ -374,27 +377,27 @@ _FX void Dll_InitInjected(void)
     Dll_BoxKeyPathLen = wcslen(Dll_BoxKeyPath);
     Dll_BoxIpcPathLen = wcslen(Dll_BoxIpcPath);
 
-  //  Dll_AlernateIpcNaming = SbieApi_QueryConfBool(NULL, L"UseAlernateIpcNaming", FALSE);
-  //  if (Dll_AlernateIpcNaming) {
-  //
-  //      //
-  //      // instead of using a separate namespace
-  //		// just replace all \ with _ and use it as a suffix rather then an actual path
-  //      // similar to what is done for named pipes already
-  //      // this approach can help to reduce the footprint when running in portable mode
-  //      // alternatively we could create volatile entries under AppContainerNamedObjects 
-  //      //
-  //
-  //      WCHAR* ptr = (WCHAR*)Dll_BoxIpcPath;
-  //      while (*ptr) {
-  //          WCHAR *ptr2 = wcschr(ptr, L'\\');
-  //          if (ptr2) {
-  //              ptr = ptr2;
-  //              *ptr = L'_';
-  //          } else
-  //              ptr += wcslen(ptr);
-  //      }
-  //  }
+    Dll_AlternateIpcNaming = SbieApi_QueryConfBool(NULL, L"UseAlternateIpcNaming", FALSE);
+    if (Dll_AlternateIpcNaming) {
+  
+        //
+        // instead of using a separate namespace
+  		// just replace all \ with _ and use it as a suffix rather then an actual path
+        // similar to what is done for named pipes already
+        // this approach can help to reduce the footprint when running in portable mode
+        // alternatively we could create volatile entries under AppContainerNamedObjects 
+        //
+  
+        WCHAR* ptr = (WCHAR*)Dll_BoxIpcPath;
+        while (*ptr) {
+            WCHAR *ptr2 = wcschr(ptr, L'\\');
+            if (ptr2) {
+                ptr = ptr2;
+                *ptr = L'_';
+            } else
+                break;
+        }
+    }
 
 
 #ifdef WITH_DEBUG
@@ -804,7 +807,6 @@ _FX VOID Dll_Ordinal1(INJECT_DATA * inject)
     SbieApi_SyscallPtr = (ULONG*)((ULONG64)data->syscall_data + sizeof(ULONG) + sizeof(ULONG) + (NATIVE_FUNCTION_SIZE * NATIVE_FUNCTION_COUNT));
 #endif
 
-    extern HANDLE SbieApi_DeviceHandle;
     SbieApi_DeviceHandle = (HANDLE)data->api_device_handle;
 
     //
@@ -852,10 +854,12 @@ _FX VOID Dll_Ordinal1(INJECT_DATA * inject)
         // workaround for Program Compatibility Assistant (PCA), we have
         // to start a second instance of this process outside the PCA job,
         // see also Proc_RestartProcessOutOfPcaJob
+        // 
+		// note: restart fails if running as AppContainer
         //
 
         int MustRestartProcess = 0;
-        if (Dll_ProcessFlags & SBIE_FLAG_PROCESS_IN_PCA_JOB) {
+        if ((Dll_ProcessFlags & SBIE_FLAG_PROCESS_IN_PCA_JOB) && !(Dll_ProcessFlags & SBIE_FLAG_PROCESS_IN_APP_PKG)) {
             if (!SbieApi_QueryConfBool(NULL, L"NoRestartOnPCA", FALSE))
                 MustRestartProcess = 1;
         }

@@ -10,13 +10,13 @@
 
 |      系统要求      |      发布说明      |     贡献指南      |      安全政策      |      行为准则       |
 |        :---:       |          :---:     |          :---:    |          :---:      |          :---:       |
-| Windows 7 或更高版本，32位或 64位。 | [CHANGELOG_zh_CN.md](./CHANGELOG_zh_CN.md) | [CONTRIBUTING.md](./CONTRIBUTING.md) | [SECURITY.md](./SECURITY.md) | [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) |
+| Windows 7 或更高版本 (64位) | [CHANGELOG_zh_CN.md](./CHANGELOG_zh_CN.md) | [CONTRIBUTING.md](./CONTRIBUTING.md) | [SECURITY.md](./SECURITY.md) | [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) |
 
-Sandboxie 是一种基于沙盒的隔离软件，适用于 32 位和 64 位 Windows NT 操作系统。它创建了一个类似沙盒的隔离操作环境，在该环境中，可以运行或安装应用程序，而不对本地和映射驱动器及 Windows 注册表进行永久性修改。隔离的虚拟环境可以控制不受信任程序的测试和网络浏览。<br>
+Sandboxie 是一种基于沙盒的隔离软件，适用于 Windows NT 操作系统。它创建了一个类似沙盒的隔离操作环境，在该环境中，可以运行或安装应用程序，而不对本地和映射驱动器及 Windows 注册表进行永久性修改。隔离的虚拟环境可以控制不受信任程序的测试和网络浏览。<br>
 
 Sandboxie 允许您创建几乎无限的沙盒，并单独或同时运行它们，以隔离程序与主机及彼此的访问，同时还允许您在单个沙盒中同时运行尽可能多的程序。
 
-**注意：这是一个社区分支，发生在 Sandboxie 源代码发布后，并不是之前开发的官方延续（请参见 [项目历史](./README.md#-project-history) 和 [#2926](https://github.com/sandboxie-plus/Sandboxie/issues/2926)）。**
+**注意：这是一个社区分支，发生在 Sandboxie 源代码发布后，并不是之前开发的官方延续（请参见 [项目历史](#project-history) 和 [#2926](https://github.com/sandboxie-plus/Sandboxie/issues/2926)）。**
 
 ## ⏬ 下载
 
@@ -80,7 +80,7 @@ Sandboxie 的功能可以通过以下专业工具进行增强：
   * [SandboxToys2](https://github.com/blap/SandboxToys2) - 允许监控沙盒内的文件和注册表更改
   * [Sbiextra](https://github.com/sandboxie-plus/sbiextra) - 对沙盒进程添加额外的用户模式限制
 
-
+<a id="project-history"></a>
 ## 📌 项目历史
 
 |      时间线       |    维护者    |

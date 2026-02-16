@@ -129,7 +129,7 @@ SBIE1212 Verzeichnis kann nicht erstellt werden '%3' %2
 .
 
 1213;pop;err;01
-SBIE1212 Object-Verzeichnis kann nicht erstellt werden '%3' %2
+SBIE1213 Object-Verzeichnis kann nicht erstellt werden '%3' %2
 .
 
 1222;pop;err;02
@@ -2144,6 +2144,10 @@ Zum Ändern der Rahmenfarbe hier klicken
 Den Rahmen nur anzeigen, wenn der Mauszeiger in der Titelleiste ist
 .
 
+3820;txt;01
+Alpha
+.
+
 #----------------------------------------------------------------------------
 # Sandboxie Control:  Sandbox Settings:  Recovery
 #----------------------------------------------------------------------------
@@ -3435,6 +3439,35 @@ Das Zertifikat ist nicht gültig.
 Das Zertifikat ist gültig und wurde erfolgreich übernommen.
 .
 
+7994;txt;01
+Sie versuchen einen Funktions-Upgrade-Schlüssel zu verwenden, ohne über ein bestehendes Unterstützerzertifikat zu verfügen.
+Diese Art von Schlüssel erfordert, dass Sie über ein bereits bestehendes gültiges Unterstützerzertifikat verfügen.
+Bitte geben Sie zuerst Ihr aktuelles Zertifikat ein und wenden Sie dann den Upgrade-Schlüssel an.
+.
+
+7995;txt;01
+Sie versuchen einen Erneuerungsschlüssel zu verwenden, ohne über ein bestehendes Unterstützerzertifikat zu verfügen.
+Diese Art von Schlüssel erfordert, dass Sie über ein bereits bestehendes gültiges Unterstützerzertifikat verfügen.
+Bitte geben Sie zuerst Ihr aktuelles Zertifikat ein und wenden Sie dann den Erneuerungsschlüssel an.
+.
+
+7996;txt;01
+Abrufen des Zertifikats vom Server fehlgeschlagen.
+%1
+.
+
+7997;txt;01
+Verbindung zum Server fehlgeschlagen. Bitte überprüfen Sie Ihre Internetverbindung.
+.
+
+7998;txt;01
+Leere Antwort vom Server.
+.
+
+7999;txt;01
+Unbekannter Serverfehler.
+.
+
 #----------------------------------------------------------------------------
 # SandboxieInstall
 #----------------------------------------------------------------------------
@@ -3646,3 +3679,4 @@ Dies ist der dritte und letzte Versuch.
 Folgende Programme müssen vor dem Fortsetzen der Installation geschlossen werden.
 Mit OK die Programme schließen und fortsetzen. Mit Abbrechen die Installation beenden.
 .
+
